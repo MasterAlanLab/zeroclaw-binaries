@@ -75,10 +75,6 @@ jobs:
             artifact: zeroclaw
             archive: tar.gz
             cross: true
-          - os: macos-13
-            target: x86_64-apple-darwin
-            artifact: zeroclaw
-            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: zeroclaw
@@ -234,10 +230,9 @@ jobs:
           const retentionDays = parseInt(process.env.RETENTION_DAYS);
 
           const targets = [
-            'x86_64-unknown-linux-gnu',
-            'aarch64-unknown-linux-musl',
-            'armv7-unknown-linux-musleabihf',
-            'x86_64-apple-darwin',
+            'x86_64-linux-gnu',
+            'aarch64-linux-musl',
+            'armv7-linux-musleabihf',
             'aarch64-apple-darwin',
             'x86_64-pc-windows-msvc'
           ];
