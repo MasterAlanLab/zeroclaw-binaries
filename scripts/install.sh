@@ -8,8 +8,8 @@
 
 set -eu
 
-BASE_URL="${ZEROCLAW_BASE_URL:-https://zeroclaw.mdzz.uk}"
-MANIFEST_URL="${BASE_URL}/manifest.json"
+BASE_URL="${ZEROCLAW_BASE_URL:-https://dl.zeroclaw.mdzz.uk}"
+MANIFEST_URL="${BASE_URL}/releases/manifest.json"
 INSTALL_DIR="${ZEROCLAW_INSTALL_DIR:-${HOME}/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
@@ -52,9 +52,8 @@ detect_target() {
       ;;
     Darwin)
       case "$arch" in
-        x86_64)  echo "x86_64-apple-darwin" ;;
         arm64)   echo "aarch64-apple-darwin" ;;
-        *)       err "unsupported architecture: $arch" ;;
+        *)       err "unsupported architecture: $arch (only Apple Silicon is supported)" ;;
       esac
       ;;
     *)

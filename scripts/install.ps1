@@ -7,8 +7,8 @@
 
 $ErrorActionPreference = 'Stop'
 
-$BaseUrl = if ($env:ZEROCLAW_BASE_URL) { $env:ZEROCLAW_BASE_URL } else { 'https://zeroclaw.mdzz.uk' }
-$ManifestUrl = "$BaseUrl/manifest.json"
+$BaseUrl = if ($env:ZEROCLAW_BASE_URL) { $env:ZEROCLAW_BASE_URL } else { 'https://dl.zeroclaw.mdzz.uk' }
+$ManifestUrl = "$BaseUrl/releases/manifest.json"
 $InstallDir = if ($env:ZEROCLAW_INSTALL_DIR) { $env:ZEROCLAW_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
 $Target = 'x86_64-pc-windows-msvc'
 
