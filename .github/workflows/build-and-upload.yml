@@ -1,0 +1,323 @@
+name: Nightly Build
+
+on:
+  schedule:
+    # Every day at 08:00 UTC
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+        type: string
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  resolve:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      ref: ${{ steps.version.outputs.ref }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - name: Checkout zeroclaw source
+        uses: actions/checkout@v4
+        with:
+          repository: zeroclaw-labs/zeroclaw
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Set version and commit
+        id: version
+        run: |
+          VERSION="nightly-$(date -u +%Y-%m-%d)"
+          COMMIT=$(git rev-parse --short=7 HEAD)
+          REF="${{ inputs.ref || 'main' }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+          echo "Commit:  $COMMIT"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: zeroclaw
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact: zeroclaw
+            archive: tar.gz
+            cross: true
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            artifact: zeroclaw
+            archive: tar.gz
+            cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: zeroclaw
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: zeroclaw
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: zeroclaw.exe
+            archive: zip
+
+    steps:
+      - name: Checkout zeroclaw source
+        uses: actions/checkout@v4
+        with:
+          repository: zeroclaw-labs/zeroclaw
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Build release (native)
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build release (cross)
+        if: matrix.cross
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Check binary size
+        if: runner.os != 'Windows'
+        id: size
+        run: |
+          BINARY="target/${{ matrix.target }}/release/${{ matrix.artifact }}"
+          SIZE=$(stat -f%z "$BINARY" 2>/dev/null || stat -c%s "$BINARY")
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Binary size: ${SIZE_MB}MB ($SIZE bytes)"
+          if [ "$SIZE" -gt 15728640 ]; then
+            echo "::error::Binary exceeds 15MB hard limit"
+            exit 1
+          elif [ "$SIZE" -gt 5242880 ]; then
+            echo "::warning::Binary exceeds 5MB target"
+          fi
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../zeroclaw-${{ matrix.target }}.tar.gz ${{ matrix.artifact }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../zeroclaw-${{ matrix.target }}.zip ${{ matrix.artifact }}
+
+      - name: Generate SHA256 (Unix)
+        if: runner.os != 'Windows'
+        run: shasum -a 256 zeroclaw-${{ matrix.target }}.tar.gz | awk '{print $1}' > sha256-${{ matrix.target }}.txt
+
+      - name: Generate SHA256 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          (Get-FileHash "zeroclaw-${{ matrix.target }}.zip" -Algorithm SHA256).Hash.ToLower() | Out-File -Encoding ascii "sha256-${{ matrix.target }}.txt"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: |
+            zeroclaw-${{ matrix.target }}.*
+            sha256-${{ matrix.target }}.txt
+          retention-days: 3
+
+  upload:
+    name: Upload to R2
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      COMMIT: ${{ needs.resolve.outputs.commit }}
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Upload archives to R2
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          for file in artifacts/zeroclaw-*; do
+            key="releases/${VERSION}/$(basename "$file")"
+            echo "Uploading $file -> $key"
+            wrangler r2 object put "${{ vars.R2_BUCKET }}/${key}" --file "$file"
+          done
+
+      - name: Generate and upload SHA256SUMS
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          cd artifacts
+          for f in sha256-*.txt; do
+            target="${f#sha256-}"
+            target="${target%.txt}"
+            hash=$(cat "$f")
+            if [[ "$target" == *"windows"* ]]; then
+              echo "${hash}  zeroclaw-${target}.zip"
+            else
+              echo "${hash}  zeroclaw-${target}.tar.gz"
+            fi
+          done > SHA256SUMS
+          cat SHA256SUMS
+          wrangler r2 object put "${{ vars.R2_BUCKET }}/releases/${VERSION}/SHA256SUMS" --file SHA256SUMS
+
+      - name: Fetch current manifest
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          wrangler r2 object get "${{ vars.R2_BUCKET }}/releases/manifest.json" --file manifest.json 2>/dev/null \
+            || echo '{"latest":"","releases":{}}' > manifest.json
+
+      - name: Update manifest and cleanup old builds
+        env:
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          RETENTION_DAYS: '15'
+        run: |
+          node -e "
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+          const version = process.env.VERSION;
+          const commit = process.env.COMMIT;
+          const baseUrl = process.env.R2_PUBLIC_URL;
+          const bucket = process.env.R2_BUCKET;
+          const retentionDays = parseInt(process.env.RETENTION_DAYS);
+
+          const targets = [
+            'x86_64-unknown-linux-gnu',
+            'aarch64-unknown-linux-musl',
+            'armv7-unknown-linux-musleabihf',
+            'x86_64-apple-darwin',
+            'aarch64-apple-darwin',
+            'x86_64-pc-windows-msvc'
+          ];
+
+          // Add new nightly build
+          const assets = {};
+          for (const target of targets) {
+            const sha256 = fs.readFileSync('artifacts/sha256-' + target + '.txt', 'utf8').trim();
+            const ext = target.includes('windows') ? 'zip' : 'tar.gz';
+            const filename = 'zeroclaw-' + target + '.' + ext;
+            const stat = fs.statSync('artifacts/' + filename);
+            assets[target] = {
+              url: baseUrl + '/releases/' + version + '/' + filename,
+              size: stat.size,
+              sha256: sha256
+            };
+          }
+
+          manifest.latest = version;
+          manifest.releases[version] = {
+            date: new Date().toISOString().split('T')[0],
+            commit: commit,
+            assets: assets
+          };
+
+          // Cleanup: remove builds older than retention period
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - retentionDays);
+          const cutoffStr = cutoff.toISOString().split('T')[0];
+
+          const expired = [];
+          for (const [ver, rel] of Object.entries(manifest.releases)) {
+            if (rel.date < cutoffStr) {
+              expired.push(ver);
+            }
+          }
+
+          for (const ver of expired) {
+            console.log('Removing expired build: ' + ver + ' (date: ' + manifest.releases[ver].date + ')');
+            delete manifest.releases[ver];
+
+            // Delete R2 objects for this version
+            const files = [
+              ...targets.map(t => 'zeroclaw-' + t + (t.includes('windows') ? '.zip' : '.tar.gz')),
+              'SHA256SUMS'
+            ];
+            for (const file of files) {
+              const key = 'releases/' + ver + '/' + file;
+              try {
+                execSync('wrangler r2 object delete \"' + bucket + '/' + key + '\"', { stdio: 'pipe' });
+                console.log('  Deleted: ' + key);
+              } catch (e) {
+                console.log('  Skip (not found): ' + key);
+              }
+            }
+          }
+
+          if (expired.length === 0) {
+            console.log('No expired builds to clean up.');
+          }
+
+          fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
+          console.log('');
+          console.log('Updated manifest:');
+          console.log('  Latest: ' + manifest.latest);
+          console.log('  Total builds: ' + Object.keys(manifest.releases).length);
+          "
+
+      - name: Upload manifest.json
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          wrangler r2 object put "${{ vars.R2_BUCKET }}/releases/manifest.json" \
+            --file manifest.json \
+            --content-type "application/json"

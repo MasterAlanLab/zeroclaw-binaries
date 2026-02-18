@@ -1,0 +1,12 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://zeroclaw.mdzz.uk",
+      "https://zeroclaw-binaries.pages.dev",
+      "http://localhost:*"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]

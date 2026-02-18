@@ -1,0 +1,77 @@
+{
+  "latest": "nightly-2026-02-18",
+  "releases": {
+    "nightly-2026-02-18": {
+      "date": "2026-02-18",
+      "commit": "a1b2c3d",
+      "assets": {
+        "x86_64-unknown-linux-gnu": {
+          "url": "#",
+          "size": 3500000,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "#",
+          "size": 3200000,
+          "sha256": "aabb0011223344556677889900aabbccddeeff00112233445566778899aabbcc"
+        },
+        "armv7-unknown-linux-musleabihf": {
+          "url": "#",
+          "size": 3100000,
+          "sha256": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        },
+        "x86_64-apple-darwin": {
+          "url": "#",
+          "size": 3400000,
+          "sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        },
+        "aarch64-apple-darwin": {
+          "url": "#",
+          "size": 3300000,
+          "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        },
+        "x86_64-pc-windows-msvc": {
+          "url": "#",
+          "size": 3600000,
+          "sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+        }
+      }
+    },
+    "nightly-2026-02-17": {
+      "date": "2026-02-17",
+      "commit": "f9e8d7c",
+      "assets": {
+        "x86_64-unknown-linux-gnu": {
+          "url": "#",
+          "size": 3480000,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "#",
+          "size": 3180000,
+          "sha256": "aabb0011223344556677889900aabbccddeeff00112233445566778899aabbcc"
+        },
+        "armv7-unknown-linux-musleabihf": {
+          "url": "#",
+          "size": 3090000,
+          "sha256": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        },
+        "x86_64-apple-darwin": {
+          "url": "#",
+          "size": 3390000,
+          "sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        },
+        "aarch64-apple-darwin": {
+          "url": "#",
+          "size": 3290000,
+          "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        },
+        "x86_64-pc-windows-msvc": {
+          "url": "#",
+          "size": 3580000,
+          "sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+        }
+      }
+    }
+  }
+}
