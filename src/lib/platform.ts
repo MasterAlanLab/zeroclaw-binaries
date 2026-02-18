@@ -14,7 +14,6 @@ const TARGET_LABELS: Record<Target, string> = {
   'x86_64-unknown-linux-gnu': 'Linux x86_64',
   'aarch64-unknown-linux-musl': 'Linux ARM64 (musl)',
   'armv7-unknown-linux-musleabihf': 'Linux ARMv7 (musl)',
-  'x86_64-apple-darwin': 'macOS Intel',
   'aarch64-apple-darwin': 'macOS Apple Silicon',
   'x86_64-pc-windows-msvc': 'Windows x86_64',
 }
@@ -23,7 +22,6 @@ const TARGET_ICONS: Record<Target, string> = {
   'x86_64-unknown-linux-gnu': 'linux',
   'aarch64-unknown-linux-musl': 'linux',
   'armv7-unknown-linux-musleabihf': 'linux',
-  'x86_64-apple-darwin': 'apple',
   'aarch64-apple-darwin': 'apple',
   'x86_64-pc-windows-msvc': 'windows',
 }
@@ -44,7 +42,6 @@ export function formatBytes(bytes: number): string {
 
 export const DESKTOP_TARGETS: Target[] = [
   'aarch64-apple-darwin',
-  'x86_64-apple-darwin',
   'x86_64-unknown-linux-gnu',
   'x86_64-pc-windows-msvc',
 ]
