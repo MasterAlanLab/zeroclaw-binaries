@@ -169,6 +169,10 @@ jobs:
     env:
       VERSION: ${{ needs.resolve.outputs.version }}
       COMMIT: ${{ needs.resolve.outputs.commit }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -177,28 +181,10 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
-      - name: List artifacts
-        run: ls -la artifacts/
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Upload archives to R2
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      - name: Prepare release directory
         run: |
-          for file in artifacts/zeroclaw-*; do
-            key="releases/${VERSION}/$(basename "$file")"
-            echo "Uploading $file -> $key"
-            wrangler r2 object put "${{ vars.R2_BUCKET }}/${key}" --file "$file"
-          done
-
-      - name: Generate and upload SHA256SUMS
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
+          mkdir -p release
+          cp artifacts/zeroclaw-*.tar.gz artifacts/zeroclaw-*.zip release/ 2>/dev/null || true
           cd artifacts
           for f in sha256-*.txt; do
             target="${f#sha256-}"
@@ -209,26 +195,29 @@ jobs:
             else
               echo "${hash}  zeroclaw-${target}.tar.gz"
             fi
-          done > SHA256SUMS
-          cat SHA256SUMS
-          wrangler r2 object put "${{ vars.R2_BUCKET }}/releases/${VERSION}/SHA256SUMS" --file SHA256SUMS
+          done > ../release/SHA256SUMS
+          ls -la ../release/
+          cat ../release/SHA256SUMS
 
-      - name: Fetch current manifest
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          wrangler r2 object get "${{ vars.R2_BUCKET }}/releases/manifest.json" --file manifest.json 2>/dev/null \
-            || echo '{"latest":"","releases":{}}' > manifest.json
+      - name: Upload to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.R2_BUCKET_NAME }}
+          source-dir: ./release/
+          destination-dir: releases/${{ needs.resolve.outputs.version }}/
 
       - name: Update manifest and cleanup old builds
         env:
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          R2_BUCKET: ${{ vars.R2_BUCKET }}
           RETENTION_DAYS: '15'
         run: |
+          aws s3 cp "s3://${R2_BUCKET}/releases/manifest.json" manifest.json \
+            --endpoint-url "${R2_ENDPOINT}" 2>/dev/null \
+            || echo '{"latest":"","releases":{}}' > manifest.json
+
           node -e "
           const fs = require('fs');
           const { execSync } = require('child_process');
@@ -238,6 +227,7 @@ jobs:
           const commit = process.env.COMMIT;
           const baseUrl = process.env.R2_PUBLIC_URL;
           const bucket = process.env.R2_BUCKET;
+          const endpoint = process.env.R2_ENDPOINT;
           const retentionDays = parseInt(process.env.RETENTION_DAYS);
 
           const targets = [
@@ -249,7 +239,6 @@ jobs:
             'x86_64-pc-windows-msvc'
           ];
 
-          // Add new nightly build
           const assets = {};
           for (const target of targets) {
             const sha256 = fs.readFileSync('artifacts/sha256-' + target + '.txt', 'utf8').trim();
@@ -270,23 +259,18 @@ jobs:
             assets: assets
           };
 
-          // Cleanup: remove builds older than retention period
           const cutoff = new Date();
           cutoff.setDate(cutoff.getDate() - retentionDays);
           const cutoffStr = cutoff.toISOString().split('T')[0];
 
           const expired = [];
           for (const [ver, rel] of Object.entries(manifest.releases)) {
-            if (rel.date < cutoffStr) {
-              expired.push(ver);
-            }
+            if (rel.date < cutoffStr) expired.push(ver);
           }
 
           for (const ver of expired) {
             console.log('Removing expired build: ' + ver + ' (date: ' + manifest.releases[ver].date + ')');
             delete manifest.releases[ver];
-
-            // Delete R2 objects for this version
             const files = [
               ...targets.map(t => 'zeroclaw-' + t + (t.includes('windows') ? '.zip' : '.tar.gz')),
               'SHA256SUMS'
@@ -294,7 +278,7 @@ jobs:
             for (const file of files) {
               const key = 'releases/' + ver + '/' + file;
               try {
-                execSync('wrangler r2 object delete \"' + bucket + '/' + key + '\"', { stdio: 'pipe' });
+                execSync('aws s3 rm \"s3://' + bucket + '/' + key + '\" --endpoint-url \"' + endpoint + '\"', { stdio: 'pipe' });
                 console.log('  Deleted: ' + key);
               } catch (e) {
                 console.log('  Skip (not found): ' + key);
@@ -302,22 +286,12 @@ jobs:
             }
           }
 
-          if (expired.length === 0) {
-            console.log('No expired builds to clean up.');
-          }
+          if (expired.length === 0) console.log('No expired builds to clean up.');
 
           fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
-          console.log('');
-          console.log('Updated manifest:');
-          console.log('  Latest: ' + manifest.latest);
-          console.log('  Total builds: ' + Object.keys(manifest.releases).length);
+          console.log('Updated manifest — Latest: ' + manifest.latest + ', Total: ' + Object.keys(manifest.releases).length);
           "
 
-      - name: Upload manifest.json
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          wrangler r2 object put "${{ vars.R2_BUCKET }}/releases/manifest.json" \
-            --file manifest.json \
+          aws s3 cp manifest.json "s3://${R2_BUCKET}/releases/manifest.json" \
+            --endpoint-url "${R2_ENDPOINT}" \
             --content-type "application/json"
