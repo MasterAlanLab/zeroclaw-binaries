@@ -93,7 +93,7 @@ main() {
     version="$ZEROCLAW_VERSION"
   else
     manifest=$(fetch "$MANIFEST_URL")
-    version=$(printf '%s' "$manifest" | grep -o '"latest":"[^"]*"' | head -1 | cut -d'"' -f4)
+    version=$(printf '%s' "$manifest" | grep -o '"latest" *: *"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)"/\1/')
     [ -n "$version" ] || err "failed to parse latest version from manifest"
   fi
   say "  Version:  $version"
