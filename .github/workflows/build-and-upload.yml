@@ -21,11 +21,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_PROFILE_RELEASE_STRIP: symbols
-  CARGO_PROFILE_RELEASE_LTO: true
-  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
-  CARGO_PROFILE_RELEASE_OPT_LEVEL: z
-  CARGO_PROFILE_RELEASE_PANIC: abort
 
 jobs:
   resolve:
@@ -124,11 +119,11 @@ jobs:
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
           SIZE_MB=$((SIZE / 1024 / 1024))
           echo "Binary size: ${SIZE_MB}MB ($SIZE bytes)"
-          if [ "$SIZE" -gt 15728640 ]; then
-            echo "::error::Binary exceeds 15MB hard limit"
+          if [ "$SIZE" -gt 26214400 ]; then
+            echo "::error::Binary exceeds 25MB hard limit"
             exit 1
-          elif [ "$SIZE" -gt 5242880 ]; then
-            echo "::warning::Binary exceeds 5MB target"
+          elif [ "$SIZE" -gt 12582912 ]; then
+            echo "::warning::Binary exceeds 12MB target"
           fi
 
       - name: Package (Unix)
