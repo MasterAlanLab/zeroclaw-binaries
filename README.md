@@ -9,13 +9,20 @@ ZeroClaw 的下载站点与 CI/CD 发布管线。包含一个 React 驱动的下
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://dl.zeroclaw.mdzz.uk/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/MasterAlanLab/zeroclaw-binaries/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://dl.zeroclaw.mdzz.uk/install.ps1 | iex
+irm https://raw.githubusercontent.com/MasterAlanLab/zeroclaw-binaries/main/scripts/install.ps1 | iex
+```
+
+**卸载:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MasterAlanLab/zeroclaw-binaries/main/scripts/uninstall.sh | sh
+# 连配置数据一起清除: 末尾加 -s -- --purge
 ```
 
 ## 支持平台
@@ -43,7 +50,9 @@ irm https://dl.zeroclaw.mdzz.uk/install.ps1 | iex
 ├── .github/workflows/    # Nightly build 流水线
 ├── scripts/
 │   ├── install.sh        # macOS/Linux 安装脚本
-│   └── install.ps1       # Windows 安装脚本
+│   ├── install.ps1       # Windows 安装脚本
+│   ├── uninstall.sh      # macOS/Linux 卸载脚本
+│   └── uninstall.ps1     # Windows 卸载脚本
 ├── src/
 │   ├── components/       # Hero, Downloads, Install, Versions
 │   └── lib/              # manifest 类型定义, 平台检测
